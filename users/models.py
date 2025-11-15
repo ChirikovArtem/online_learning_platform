@@ -1,0 +1,79 @@
+from django.contrib.auth.models import AbstractUser
+from django.db import models
+
+from materials.models import Course, Lesson
+
+
+class User(AbstractUser):
+    """Модель пользователь"""
+
+    username = None
+    email = models.EmailField(unique=True, verbose_name="Email")
+    phone = models.CharField(
+        max_length=35,
+        verbose_name="Телефон",
+        null=True,
+        blank=True,
+        help_text="Введите номер телефона",
+    )
+    country = models.CharField(
+        max_length=35,
+        verbose_name="Страна",
+        blank=True,
+        null=True,
+        help_text="Укажите страну",
+    )
+    avatar = models.ImageField(
+        upload_to="users/avatars",
+        verbose_name="Аватар",
+        null=True,
+        blank=True,
+        help_text="Загрузите свой аватар",
+    )
+
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = []
+
+    class Meta:
+        verbose_name = "Пользователь"
+        verbose_name_plural = "Пользователи"
+        permissions = [
+            ("can_block_users", "Сan block users"),
+        ]
+
+    def __str__(self):
+        return self.email
+
+
+class Payment(models.Model):
+    CASH = "cash"
+    NON_CASH = "non_cash"
+
+    STATUS_CHOICES = [
+        (CASH, "Наличные"),
+        (NON_CASH, "Перевод на счет"),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="payments", blank=True, null=True
+    )
+    course = models.ForeignKey(
+        Course, on_delete=models.CASCADE, related_name="payments", blank=True, null=True
+    )
+    lesson = models.ForeignKey(
+        Lesson, on_delete=models.CASCADE, related_name="payments", blank=True, null=True
+    )
+    data_payment = models.DateField(verbose_name="дата оплаты")
+    amount_payment = models.PositiveIntegerField(
+        verbose_name="Сумма оплаты", default=0, help_text="Введите сумму оплаты"
+    )
+    method_payment = models.CharField(
+        max_length=30, choices=STATUS_CHOICES, blank=True, null=True
+    )
+
+    class Meta:
+        verbose_name = "Платеж"
+        verbose_name_plural = "Платежи"
+
+    def __str__(self):
+        return f"{self.user} - {self.course if self.course else self.lesson}"
