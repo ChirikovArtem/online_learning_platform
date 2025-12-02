@@ -1,5 +1,5 @@
-from rest_framework.fields import SerializerMethodField
 from rest_framework import serializers
+from rest_framework.fields import SerializerMethodField
 
 from materials.models import Course, Lesson, Subscription
 from materials.validators import validate_third_party_resources

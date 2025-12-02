@@ -6,12 +6,14 @@ from rest_framework.generics import (
     ListAPIView,
     RetrieveAPIView,
     UpdateAPIView,
+    get_object_or_404,
 )
 from rest_framework.permissions import AllowAny
 from rest_framework.viewsets import ModelViewSet
 
 from users.models import Payment, User
 from users.serializers import PaymentSerializer, UserSerializer
+from users.services import PaymentStripe
 
 
 class UserViewSet(ModelViewSet):
@@ -56,3 +58,30 @@ class PaymentListAPIView(generics.ListAPIView):
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["course", "lesson", "method_payment"]
     ordering_fields = ("data_payment",)
+
+
+class PaymentCreateAPIView(CreateAPIView):
+
+    serializer_class = PaymentSerializer
+    queryset = Payment.objects.all()
+
+    def perform_create(self, serializer):
+        payment = serializer.save(user=self.request.user)
+        course_id = self.request.data.get("course")
+
+        if course_id:
+            payment.course = get_object_or_404(Course, pk=course_id)
+            product = payment.course.name
+        else:
+            lesson_id = self.request.data.get("lesson")
+            payment.lesson = get_object_or_404(Lesson, pk=lesson_id)
+            product = payment.lesson.name
+
+        product_id = PaymentStripe.create_stripe_product(product)
+        amount = self.request.data.get("amount_payment")
+        price = PaymentStripe.create_stripe_price(product_id, amount)
+        session_id, session_url = PaymentStripe.create_stripe_session(price)
+        payment.session_id = session_id
+        payment.link = session_url
+        payment.method_payment = "non_cash"
+        payment.save()
