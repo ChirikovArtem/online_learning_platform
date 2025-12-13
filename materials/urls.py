@@ -1,5 +1,5 @@
 from django.urls import path
-from rest_framework.routers import SimpleRouter, DefaultRouter
+from rest_framework.routers import DefaultRouter
 
 from materials.views import (
     CourseViewSet,

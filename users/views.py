@@ -11,6 +11,7 @@ from rest_framework.generics import (
 from rest_framework.permissions import AllowAny
 from rest_framework.viewsets import ModelViewSet
 
+from materials.models import Course, Lesson
 from users.models import Payment, User
 from users.serializers import PaymentSerializer, UserSerializer
 from users.services import PaymentStripe

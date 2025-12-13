@@ -17,6 +17,7 @@ from materials.serializers import CourseSerializer, LessonSerializer
 from users.permissions import IsModer, IsOwner
 from materials.tasks import send_info_about_course_update
 
+
 class CourseViewSet(ModelViewSet):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
@@ -48,6 +49,7 @@ class CourseViewSet(ModelViewSet):
         if subscriptions:
             email_list = [subscription.user.email for subscription in subscriptions]
             send_info_about_course_update.delay(course.name, email_list)
+
 
 class LessonCreateAPIView(CreateAPIView):
     queryset = Lesson.objects.all()
