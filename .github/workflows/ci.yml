@@ -1,55 +1,38 @@
-name: Django CI/CD
+name: Django CI
 
-on:
-  push:
-    branches: [main, master]  # явно указываем ветки
-  pull_request:
-    branches: [main, master]
+on: [push, pull_request]
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
+    - name: Check out code
+      uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install flake8
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8
 
-      - name: Run Flake8
-        run: flake8 . --exclude=migrations,tests --max-line-length=88
+    - name: Run Flake8
+      run: flake8 .
 
   test:
     needs: lint
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: test_db
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.13'
 
@@ -58,72 +41,51 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Configure environment
-        run: |
-          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> $GITHUB_ENV
-          echo "DATABASE_URL=postgres://test_user:test_password@localhost:5432/test_db" >> $GITHUB_ENV
-
-      - name: Apply migrations
-        run: python manage.py migrate
+      - name: Set environment variables
+        run: echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> $GITHUB_ENV
 
       - name: Run tests
-        run: python manage.py test --verbosity=2
-
-      - name: Test report
-        if: always()
-        run: echo "Tests completed with exit code $?"
+        run: python manage.py test
 
   build:
     needs: test
     runs-on: ubuntu-latest
+
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Log in to Docker Hub
-        run: |
-          echo "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}" | \
-          docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
+        run: echo "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
 
       - name: Build Docker image
-        run: |
-          docker build \
-            --build-arg SECRET_KEY="${{ secrets.SECRET_KEY }}" \
-            -t "${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}" \
-            .
+        run: docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }} .
 
-      - name: Push Docker image
-        run: docker push "${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}"
+      - name: Push Docker image to Docker Hub
+        run: docker push ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}
 
   deploy:
-    needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    needs: build
+
     steps:
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
+      - name: Add known hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
       - name: Deploy to server
         run: |
-          ssh -o StrictHostKeyChecking=no \
-              -o UserKnownHostsFile=/dev/null \
-              "${SSH_USER}@${SERVER_IP}" << 'EOF'
-          #!/bin/bash
-          set -e
-          docker pull "${DOCKER_HUB_USERNAME}/myapp:${GITHUB_SHA}"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}
           docker stop myapp || true
           docker rm myapp || true
-          docker run -d \
-            --name myapp \
-            -p 80:8000 \
-            -e SECRET_KEY="${SECRET_KEY}" \
-            "${DOCKER_HUB_USERNAME}/myapp:${GITHUB_SHA}"
+          docker run -d --name myapp -p 80:8000 ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}
           EOF
-        env:
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-          GITHUB_SHA: ${{ github.sha }}
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
