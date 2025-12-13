@@ -16,7 +16,7 @@ class LessonsTest(APITestCase):
     def test_create_lesson(self):
         """Тестирование создания урока"""
         data = {"name": "test", "description": "test", "owner": self.user.pk}
-        response = self.client.post("/lesson/create", data=data)
+        response = self.client.post("/lesson/create/", data=data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         self.assertEqual(Lesson.objects.all().count(), 2)
