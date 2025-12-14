@@ -75,41 +75,40 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
-      - name: Проверка сетевой доступности сервера
-        run: |
-          echo "Проверяем доступность порта 22 на сервере"
-          nc -zv ${{ secrets.SERVER_IP }} 22 || echo "Порт 22 недоступен или сервер не отвечает"
-
-      - name: Установка соединения по SSH и проверка Docker
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} 'docker --version || echo "Docker не установлен"'
-
-      - name: Add known hosts
+      - name: Add server to known_hosts
         run: |
           mkdir -p "$HOME/.ssh"
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> "$HOME/.ssh/known_hosts" || true
 
-      - name: Check Docker installation
+      - name: Проверка доступности сервера
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} 'docker --version || echo "Docker not installed"'
+          ping -c 3 ${{ secrets.SERVER_IP }} || echo "Сервер не отвечает на ping"
+          nc -zv ${{ secrets.SERVER_IP }} 22 || echo "Порт 22 недоступен"
 
-      - name: Install Docker if not present
+      - name: Проверка установки Docker
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} '
-          if ! which docker > /dev/null; then
-            echo "Installing Docker..."
-            sudo apt update
-            sudo apt install -y docker.io
-            sudo systemctl start docker
-            sudo systemctl enable docker
-          fi
+            set -e
+            docker --version || echo "Docker не установлен"
+          '
+
+      - name: Установка Docker, если не установлен
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} '
+            if ! which docker > /dev/null; then
+              echo "Устанавливаем Docker..."
+              sudo apt update
+              sudo apt install -y docker.io
+              sudo systemctl start docker
+              sudo systemctl enable docker
+            fi
           '
 
       - name: Deploy to server
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-          docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}
-          docker stop myapp || true
-          docker rm myapp || true
-          docker run -d --name myapp -p 80:8000 ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}
+            docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}
+            docker stop myapp || true
+            docker rm myapp || true
+            docker run -d --name myapp -p 80:8000 ${{ secrets.DOCKER_HUB_USERNAME }}/myapp:${{ github.sha }}
           EOF
