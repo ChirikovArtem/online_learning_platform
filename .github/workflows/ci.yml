@@ -75,6 +75,15 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
+      - name: Проверка сетевой доступности сервера
+        run: |
+          echo "Проверяем доступность порта 22 на сервере"
+          nc -zv ${{ secrets.SERVER_IP }} 22 || echo "Порт 22 недоступен или сервер не отвечает"
+
+      - name: Установка соединения по SSH и проверка Docker
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} 'docker --version || echo "Docker не установлен"'
+
       - name: Add known hosts
         run: |
           mkdir -p "$HOME/.ssh"
